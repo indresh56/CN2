@@ -33,7 +33,7 @@ int send_fd(int socket, int fd_to_send)
 
   /* at least one vector of one byte must be sent */
   message_buffer[0] = 'F';
-  io_vector[0].iov_base = message_buffer;
+         io_vector[0].iov_base = message_buffer;
   io_vector[0].iov_len = 1;
 
   /* initialize socket message */
