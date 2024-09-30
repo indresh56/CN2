@@ -72,24 +72,33 @@ int main()
                     int clientsize=sizeof(clientaddr);
                     
                     int nsfd=0;
-                   printf("hello");
+                  
                     if((nsfd = accept(P[i].fd, (struct sockaddr *)&clientaddr, &clientsize))==-1)
                     {
                         perror("Problem in accepting");
                     }
+                    //  printf("%d ",nsfd);
+                    // fflush(stdout);
                     
-                    char s[200];
-                    ssize_t bytesRead = recv(P[i].fd, s, 200,0);
-
-                    printf("%d %d",nsfd,bytesRead);
-                    fflush(stdout);
+                    
+                   
+                    while(1)
+                    {
+                        char s[200];
+                     ssize_t bytesRead = recv(nsfd, s, sizeof(s),0);
                     if (bytesRead <= 0)
                     {
                         continue;
                     }
+                    else
+                    {
                     s[bytesRead]='\0';
                     printf("%s",s);
+                    fflush(stdout);
                     write(fd,s,sizeof(s));
+                    break;
+                    }
+                    }
                     close(nsfd);
                 }
             }
