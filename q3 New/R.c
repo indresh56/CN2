@@ -26,8 +26,18 @@
 int main()
 {
     int sfd[3];
-     mkfifo("Rep", 0666);
-     int fd=open("Rep", O_RDWR);
+     //mkfifo("Rep", 0666);
+    //  if(mkfifo("Rep",0666)==-1)
+	// {
+	// 	perror("mkfifo()1");
+	// 	exit(1);
+	// }
+    int fd;
+     if( (fd=open("Rep", O_RDWR))==-1)
+     {
+        perror("open()");
+		exit(1);
+     }
     for (int i = 0; i < 3; i++)
     {
         sfd[i] = socket(AF_INET, SOCK_STREAM, 0); // 0 given for default
@@ -36,9 +46,9 @@ int main()
         if (i == 0)
             serveaddr.sin_port = htons(7070);
         else if (i == 1)
-            serveaddr.sin_port = htons(8080);
+            serveaddr.sin_port = htons(7071);
         else
-            serveaddr.sin_port = htons(9090);
+            serveaddr.sin_port = htons(7072);
         serveaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
         bind(sfd[i], (struct sockaddr *)&serveaddr, sizeof(serveaddr));
         listen(sfd[i], 5); // 5 is the wait no
@@ -59,18 +69,26 @@ int main()
                 if (P[i].revents & POLLIN)
                 {
                     struct sockaddr_in clientaddr;
-                    int clientsize;
-                    int nsfd = accept(sfd[i], (struct sockaddr *)&clientaddr, &clientsize);
-                    printf("%d",nsfd);
+                    int clientsize=sizeof(clientaddr);
+                    
+                    int nsfd=0;
+                   printf("hello");
+                    if((nsfd = accept(P[i].fd, (struct sockaddr *)&clientaddr, &clientsize))==-1)
+                    {
+                        perror("Problem in accepting");
+                    }
+                    
                     char s[200];
-                    ssize_t bytesRead = recv(sfd[i], s, 200,0);
-   
+                    ssize_t bytesRead = recv(P[i].fd, s, 200,0);
+
+                    printf("%d %d",nsfd,bytesRead);
+                    fflush(stdout);
                     if (bytesRead <= 0)
                     {
                         continue;
                     }
                     s[bytesRead]='\0';
-                    // printf("%s",s);
+                    printf("%s",s);
                     write(fd,s,sizeof(s));
                     close(nsfd);
                 }

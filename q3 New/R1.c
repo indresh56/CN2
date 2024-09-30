@@ -14,7 +14,7 @@ int main()
     {
         perror("Error in connection");
     }
-
+    printf("Connection Done\n");
      char s[200];
     fgets(s, sizeof(s), stdin);
     send(sfd,s,sizeof(s),0);
