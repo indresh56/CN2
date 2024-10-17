@@ -55,19 +55,22 @@ void *fun(void *fd)
 int main()
 {
 
-    int rsfd = socket(AF_INET,SOCK_RAW,IPPROTO_RAW);
+    // int rsfd = socket(AF_INET,SOCK_RAW,IPPROTO_UDP);
+    int ssfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if(ssfd < 0) {
+        perror("Could not create socket");
+        exit(1);
+    }
 	struct sockaddr_in addr;
 	memset(&addr,0,sizeof(addr));
 	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = INADDR_ANY;
-    // addr.sin_port=htons(8888);
-	if(bind(rsfd,(struct sockaddr*)&addr,sizeof(addr))<0)
-	{
-		perror("Could not bind");
-        close(rsfd);
-        exit(0);
-	}
-   
+	addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    addr.sin_port = htons(8888);
+    if(bind(ssfd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        perror("Bind failed");
+        close(ssfd);
+        exit(1);
+    }
     int sfd[5];
     for (int i = 0; i < 5; i++)
     {
@@ -98,7 +101,8 @@ int main()
     int n=0;
     struct pollfd PFD[6];
     for(int i=0;i<5;i++) PFD[i].fd=sfd[i];
-    PFD[5].fd=rsfd;
+    // PFD[5].fd=rsfd;
+    PFD[5].fd=ssfd;
     for(int i=0;i<6;i++) PFD[i].events=POLLIN;
     while(1)
     {
@@ -111,16 +115,37 @@ int main()
                 {
                     if(i==5)
                     {
+                        //   char buffer[65536];
+                        //    int data_size = recvfrom(rsfd, buffer, sizeof(buffer), 0, NULL, NULL);
+                        //     if (data_size < 0) {
+                        //         perror("Receiving error");
+                        //         continue;
+                        //     }
+
+                           
+
                         char buff[100];
                            struct sockaddr_in client_addr;
                            socklen_t addr_len = sizeof(client_addr);
-                        if(recvfrom(PFD[i].fd,buff,sizeof(buff),0,(struct sockaddr*)&client_addr, &addr_len)<0){
+                           int datasize=recvfrom(PFD[i].fd,buff,sizeof(buff),0,(struct sockaddr*)&client_addr, &addr_len);
+
+                        if(datasize<0){
                             perror("error in receiving");
-                            exit(0);
+                            continue;
                         }
-                        Cheater.insert(atoi(buff));
-                        cout<<"Cheater "<<buff<<endl;
+                        buff[datasize]='\0';
+                        // struct iphdr *ip = (struct iphdr *)buffer;
+                        // int ip_header_len = ip->ihl * 4; // Length of the IP header in bytes
+                        // char *data = buffer + ip_header_len; // Skip IP header to get to the actual data
+
+                        // Null-terminate the data for safe printing
+                        // data[data_size - ip_header_len] = '\0';
+
+                        cout << "Cheater: " << buff << endl;
                         fflush(stdout);
+                        Cheater.insert(atoi(buff));
+                     
+                        
                     }
                     else{
                         struct sockaddr_in clientaddr;
@@ -134,7 +159,7 @@ int main()
                         send(nsfd,Ques,strlen(Ques),0);
                         char buff[100];
                         recv(nsfd,buff,sizeof(buff),0);
-                        printf("%s\n",buff);
+                        printf("Joined %s\n",buff);
                         fflush(stdout);
                         struct Adata *Temp = (struct Adata *)malloc(sizeof(struct Adata));
                         Temp->fd = nsfd;

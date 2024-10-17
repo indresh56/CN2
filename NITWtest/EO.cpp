@@ -32,17 +32,23 @@ using namespace std;
 
 int main()
 {
-    rsfd = socket(AF_INET,SOCK_RAW,75);
-	if(rsfd<0)
+    // rsfd = socket(AF_INET,SOCK_RAW,IPPROTO_UDP);
+	// if(rsfd<0)
+	// {
+	// 	perror("Could not create socket");exit(0);
+	// }
+    int sfd=socket(AF_INET,SOCK_DGRAM,0);
+    if(sfd<0)
 	{
 		perror("Could not create socket");exit(0);
 	}
-
 	memset(&addr,0,sizeof(addr));
 	addr.sin_family = AF_INET;
+    // addr.sin_addr.s_addr=INADDR_ANY;
     addr.sin_addr.s_addr = inet_addr("127.0.0.1");
     addr.sin_port=htons(8888);
-	
+	// 	int optval=1;
+	// setsockopt(rsfd, IPPROTO_IP, SO_BROADCAST, &optval, sizeof(int));
     if(mkfifo("fifo",0666)==-1)//fifo for sending warning
     {
         perror("fifo creation");
@@ -55,7 +61,7 @@ int main()
 		perror("Could not create socket");exit(0);
 	}
 	char buffer[65536];
-	if(setsockopt(rsfd,SOL_SOCKET,SO_BINDTODEVICE,"eth0",strlen("eth0"))<0)
+	if(setsockopt(rsfd2,SOL_SOCKET,SO_BINDTODEVICE,"eth0",strlen("eth0"))<0)
 	{
 		perror("Could not set option");
 	}
@@ -92,11 +98,53 @@ int main()
                         char *str="Don't switch tabs or open any program: Last time warning\n";
                     write(ffd,str,strlen(str));
                     }
-                    else{
+                    else
+                    {
+                        // const char *message = "8080";
+                        // int message_length = strlen(message);
+
+                        // // Prepare the IP header
+                        // struct iphdr *ip_header = (struct iphdr *)malloc(sizeof(struct iphdr) + message_length);
+                        // ip_header->version = 4; // IPv4
+                        // ip_header->ihl = 5; // Header length
+                        // ip_header->tos = 0; // Type of service
+                        // ip_header->tot_len = htons(sizeof(struct iphdr) + message_length); // Total length
+                        // ip_header->id = htons(54321); // Identification
+                        // ip_header->frag_off = 0; // Fragment offset
+                        // ip_header->ttl = 64; // Time to live
+                        // ip_header->protocol = IPPROTO_RAW; // Protocol
+                        // ip_header->check = 0; // Checksum (0 for now)
+                        // ip_header->saddr = inet_addr("127.0.0.1"); // Source IP address
+                        // ip_header->daddr = inet_addr("127.0.0.1"); // Destination IP address
+
+                        // // Copy the message to the buffer after the IP header
+                        // memcpy((char *)ip_header + sizeof(struct iphdr), message, message_length);
+                        // if (sendto(rsfd, ip_header, sizeof(struct iphdr) + message_length, 0,(struct sockaddr*)&addr, sizeof(addr)) < 0) {
+                        //             perror("Send failed");
+                        //  }
+                         
+
+
                         char *str="8080";
-                        if(sendto(rsfd,str,strlen(str),0,(struct sockaddr*)&addr, sizeof(addr))<0){
-                            perror("send failed");
-                        };
+                        if(sendto(sfd, str, strlen(str), 0, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+                            perror("Send failed");
+                            close(sfd);
+                            exit(1);
+                        }
+                        
+                        //system("ip link set eth0 down");                SHUTTING DOWN INTERNET
+
+
+
+
+
+
+                        // if(sendto(rsfd,str,strlen(str),0,(struct sockaddr*)&addr, sizeof(addr))<0){
+                        //     close(rsfd);
+                        //     perror("send failed");
+                        //      cout << "Error code: " << errno << endl;
+                        // };
+                        cout<<"Data sent"<<endl;
                         break;
 
                     }
