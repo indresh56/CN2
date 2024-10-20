@@ -68,7 +68,7 @@ int main()
     }
     printf("Done\n");
      
-    logfile=fopen("log.txt","w");
+    logfile=fopen("/log.txt","w");
     if(logfile==NULL) 
     {
         printf("Unable to create file.");
