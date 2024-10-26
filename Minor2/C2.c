@@ -37,7 +37,7 @@ int main()
 
     struct sockaddr_in serveaddr;
     serveaddr.sin_family = AF_INET;
-    serveaddr.sin_port = htons(5050); 
+    serveaddr.sin_port = htons(5051); 
     serveaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
   
@@ -62,7 +62,7 @@ int main()
         struct sockaddr_in addr;
         int siz=sizeof(addr);
         if(recvfrom(rsfd,buff,sizeof(buff),0,(struct sockaddr*)&addr,&siz)<0) continue;
-         else printf("New Service: %s\n",buff+((struct iphdr*)buff)->ihl*4);
+        else printf("New Service: %s\n",buff+((struct iphdr*)buff)->ihl*4);
     }
 
 

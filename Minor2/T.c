@@ -39,7 +39,7 @@ int main()
 {
     int store[100];
     char storeip[100][20];
-    int storeclientport[100];
+    // int storeclientport[100];
 
     int size=0;
     int rsfd=socket(AF_INET,SOCK_RAW,IPPROTO_TCP);
@@ -61,7 +61,10 @@ int main()
         close(sfd);
         exit(EXIT_FAILURE);
     }
-    
+     int rsfd2 = socket(AF_INET, SOCK_RAW, 150);
+    if(rsfd2<0)
+        perror("raw socket fail: ");
+
     while(1)
     {
         struct sockaddr_in saddr;
@@ -86,12 +89,18 @@ int main()
                         perror("send failed: ");
                     }
                     store[size]=serverport;
+                    strcpy(storeip[size],inet_ntoa(*(struct in_addr *)&ip_header->daddr));
                     size++;
                     //store source ip and dest
-                    // for(int i=0;i<size-1;i++)
-                    // {
-                            //send conectionless
-                    // }
+                    for(int i=0;i<size-1;i++)
+                    {
+                            struct sockaddr_in dest;
+                            dest.sin_family = AF_INET;
+                            dest.sin_addr.s_addr = inet_addr(storeip[i]);
+                            if (sendto(rsfd2, b, 256, 0, (struct sockaddr *) &dest, sizeof(dest)) < 0) {
+                                perror("sendto failed");
+                            }
+                    }
                 }
             }
         }

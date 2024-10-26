@@ -122,7 +122,23 @@ int send_fd(int socket, int fd_to_send)
 
 int main()
 {
-    
+     int usfd;
+    struct sockaddr_un userv_addr, ucli_addr;
+    int userv_len=sizeof(struct sockaddr_un), ucli_len=sizeof(struct sockaddr_un);
+    usfd = socket(AF_UNIX, SOCK_STREAM, 0);
+    perror("socket");
+    bzero(&userv_addr, sizeof(userv_addr));
+    userv_addr.sun_family = AF_UNIX;
+    strcpy(userv_addr.sun_path, ADDRESS);
+    unlink(ADDRESS);
+    userv_len = sizeof(userv_addr);
+    if (bind(usfd, (struct sockaddr *)&userv_addr, userv_len) == -1)
+        perror("server: bind");
+    if (listen(usfd, 10) < 0)
+    {
+        perror("listen");
+        exit(1);
+    }
     int sfd = socket(AF_INET, SOCK_STREAM, 0); // 0 given for default
     if (sfd < 0) {
         perror("Socket creation failed");
@@ -155,31 +171,15 @@ int main()
         exit(0);
     }
     close(sfd);
-    char *str="Serviced First Client\n";
+    char *str="Serviced First Time Client\n";
     if(send(nsfd,str,strlen(str),0)<0){
         perror("send: ");
     }
-    printf("Serviced First Client %d\n",nsfd);
+    printf("Serviced First Client\n");
     close(nsfd);
     
 
-     int usfd;
-    struct sockaddr_un userv_addr, ucli_addr;
-    int userv_len=sizeof(struct sockaddr_un), ucli_len=sizeof(struct sockaddr_un);
-    usfd = socket(AF_UNIX, SOCK_STREAM, 0);
-    perror("socket");
-    bzero(&userv_addr, sizeof(userv_addr));
-    userv_addr.sun_family = AF_UNIX;
-    strcpy(userv_addr.sun_path, ADDRESS);
-    unlink(ADDRESS);
-    userv_len = sizeof(userv_addr);
-    if (bind(usfd, (struct sockaddr *)&userv_addr, userv_len) == -1)
-        perror("server: bind");
-    if (listen(usfd, 10) < 0)
-    {
-        perror("listen");
-        exit(1);
-    }
+    
      int nufd;
     if ((nufd = accept(usfd, (struct sockaddr *)&ucli_addr, &ucli_len)) < 0)
     {
@@ -187,7 +187,7 @@ int main()
         exit(1);
     }
     close(usfd);
-    printf("nufd %d\n",nufd);
+    // printf("nufd %d\n",nufd);
     while(1)
     {
         nsfd=recv_fd(nufd);
@@ -202,17 +202,7 @@ int main()
         // break;
     }
 
-    //     struct sockaddr_in accepted_addr;
-    // socklen_t accepted_addrlen = sizeof(accepted_addr);
-    // if (getsockname(nsfd, (struct sockaddr *)&accepted_addr, &accepted_addrlen) < 0) {
-    //     perror("getsockname failed");
-    //     close(nsfd);
-    //     close(sfd);
-    //     exit(EXIT_FAILURE);
-    // }
-
-    // // Print the local port of the accepted socket
-    // printf("Accepted socket is bound to port: %d\n", ntohs(accepted_addr.sin_port));
+   
   
     
 
