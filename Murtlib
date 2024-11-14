@@ -1,0 +1,446 @@
+#include <sys/msg.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/sem.h>
+#include <poll.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/un.h>
+#include <fcntl.h>
+#include <time.h>
+#include <pthread.h>
+#include <sys/select.h>
+#include <signal.h>
+#include <netinet/ip.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <netinet/if_ether.h>
+#include <net/ethernet.h>
+#include <netinet/ether.h>
+#include <netinet/udp.h>
+#include <ifaddrs.h>
+#include <pcap.h>
+#include <netdb.h>
+#define TCP 6
+#define UDP 17
+// fifo
+int getfifo(char *name, int flag)
+{
+    if (mkfifo(name, IPC_CREAT | 0666) < 0)
+    {
+        if (errno != EEXIST)
+            perror("fifo making failed");
+    }
+    int fd;
+    if (fd = open(name, flag) < 0)
+        perror("FIFO open failed");
+    return fd;
+}
+// Msg Q
+int getmq(char *name)
+{
+    key_t k = ftok(name, 0);
+    int id = msgget(k, IPC_CREAT | 0666);
+    if (id < 0)
+    {
+        perror("Msq Get failed");
+    }
+    return id;
+}
+// BSD Sockets
+void getmyip(char *ip) {
+    struct ifaddrs *ifaddr, *ifa;
+    char host[NI_MAXHOST];
+
+    // Get a linked list of network interfaces
+    if (getifaddrs(&ifaddr) == -1) {
+        perror("getifaddrs");
+        return ;
+    }
+
+    // Loop through each network interface
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL) continue; // Skip if there's no address
+
+        // Only consider IPv4 addresses
+        if (ifa->ifa_addr->sa_family == AF_INET) {
+            // Convert the network address to a readable format
+            if (getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), 
+                            host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST) == 0) {
+                // Skip the loopback interface (127.0.0.1)
+                if (strcmp(host, "127.0.0.1") != 0) {
+                    strcpy(ip,host);
+                    return;
+                }
+            }
+        }
+    }
+
+    // Free the linked list
+    freeifaddrs(ifaddr);
+
+    return;
+}
+struct sockaddr_in baddr_maker(char *ip, int port)
+{
+    struct sockaddr_in addr;
+    addr.sin_addr.s_addr = inet_addr(ip);
+    addr.sin_port = htons(port);
+    addr.sin_family = AF_INET;
+    return addr;
+}
+
+int bserver_sock(int port, int protocol)
+{
+    int sfd;
+    if (protocol == TCP)
+        sfd = socket(AF_INET, SOCK_STREAM, 0);
+    else
+        sfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sfd < 0)
+    {
+        perror("Socket making failed");
+    }
+    char ip[100];
+    getmyip(ip);
+    struct sockaddr_in addr = baddr_maker(ip, port);
+    if (bind(sfd,(struct sockaddr*) &addr, sizeof(addr)) < 0)
+        perror("BSD bind failed");
+    if (protocol == TCP)
+    {
+        if (listen(sfd, 5) < 0)
+            perror("BSD listen failed");
+    }
+    return sfd;
+}
+
+int bclient_sock(int port, int protocol)
+{
+    int sfd;
+    if (protocol == TCP)
+        sfd = socket(AF_INET, SOCK_STREAM, 0);
+    else
+        sfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sfd < 0)
+    {
+        perror("Socket making failed");
+    }
+    char ip[100];
+    getmyip(ip);
+    struct sockaddr_in addr = baddr_maker(ip, port);
+    socklen_t s = sizeof(addr);
+    if (protocol == TCP)
+    {
+        if (connect(sfd, (struct sockaddr*)&addr, s) < 0){
+            perror("Client Connect failed");
+            close(sfd);
+        }
+    }
+    else
+    {
+        if (bind(sfd, (struct sockaddr*)&addr, s) < 0){
+            perror("Bind socket UDP failed");
+            close(sfd);
+        }
+    }
+    return sfd;
+}
+
+int bclient_addr_sock(struct sockaddr_in addr)
+{
+    int sfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sfd < 0)
+    {
+        perror("Socket making failed");
+    }
+    socklen_t s = sizeof(addr);
+    if (connect(sfd,(struct sockaddr*) &addr, s) < 0){
+        perror("Client Connect failed");
+        close(sfd);
+    }
+    return sfd;
+}
+
+void baddr_to_ip_port(struct sockaddr_in addr, int *arr){ // arr is a 5 size arr to get n1.n2.n3.n4 n5(port)
+    char ip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &(addr.sin_addr), ip, INET_ADDRSTRLEN);
+    int t=0,j=0;
+    strcat(ip,".");
+    for(int i=0;i<strlen(ip);i++){
+        if(ip[i]=='.'){
+            arr[j]=t;
+            t=0;
+            j++;
+        }
+        else{
+            t*=10;
+            t+=ip[i]-'0';
+        }
+    }
+    arr[j]=ntohs(addr.sin_port);
+}
+// Unix Domain Socket
+struct sockaddr_un uaddr_maker(char *path)
+{
+    struct sockaddr_un server_addr;
+    memset(&server_addr, 0, sizeof(struct sockaddr_un));
+    server_addr.sun_family = AF_UNIX;
+    strncpy(server_addr.sun_path, path, sizeof(server_addr.sun_path) - 1);
+    return server_addr;
+}
+
+void uaddr_to_path(struct sockaddr_un addr,char *p){
+    p[0]='\0';
+    strcat(p,addr.sun_path);
+}
+
+int userver_sock(char *path, int protocol)
+{
+    unlink(path);
+    struct sockaddr_un addr = uaddr_maker(path);
+    int usfd;
+    if (protocol == TCP)
+        usfd = socket(AF_UNIX, SOCK_STREAM, 0);
+    else
+    {
+        usfd = socket(AF_UNIX, SOCK_DGRAM, 0);
+    }
+    if (usfd < 0)
+        perror("Unix socket failed");
+    if (bind(usfd,(struct sockaddr*) &addr, sizeof(addr)) < 0)
+        perror("Unix Socket bind failed");
+    if (protocol == TCP)
+    {
+        if (listen(usfd, 5) < 0)
+            perror("Unix listen failed");
+    }
+    return usfd;
+}
+
+int uclient_sock(char *path)
+{
+    struct sockaddr_un addr = uaddr_maker(path);
+    int usfd;
+    usfd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (usfd < 0)
+        perror("Unix socket failed");
+    socklen_t s=sizeof(addr);
+    if (connect(usfd,(struct sockaddr*) &addr, s) < 0)
+    {
+        perror("Unix Client Connect Fail");
+        printf("%s\n",path);
+    }
+    return usfd;
+}
+
+int send_fd(int socket, int fd_to_send)
+{
+    struct msghdr socket_message;
+    struct iovec io_vector[1];
+    struct cmsghdr *control_message = NULL;
+    char message_buffer[1];
+    /* storage space needed for an ancillary element with a paylod of length is CMSG_SPACE(sizeof(length)) */
+    char ancillary_element_buffer[CMSG_SPACE(sizeof(int))];
+    int available_ancillary_element_buffer_space;
+
+    /* at least one vector of one byte must be sent */
+    message_buffer[0] = 'F';
+    io_vector[0].iov_base = message_buffer;
+    io_vector[0].iov_len = 1;
+
+    /* initialize socket message */
+    memset(&socket_message, 0, sizeof(struct msghdr));
+    socket_message.msg_iov = io_vector;
+    socket_message.msg_iovlen = 1;
+
+    /* provide space for the ancillary data */
+    available_ancillary_element_buffer_space = CMSG_SPACE(sizeof(int));
+    memset(ancillary_element_buffer, 0, available_ancillary_element_buffer_space);
+    socket_message.msg_control = ancillary_element_buffer;
+    socket_message.msg_controllen = available_ancillary_element_buffer_space;
+
+    /* initialize a single ancillary data element for fd passing */
+    control_message = CMSG_FIRSTHDR(&socket_message);
+    control_message->cmsg_level = SOL_SOCKET;
+    control_message->cmsg_type = SCM_RIGHTS;
+    control_message->cmsg_len = CMSG_LEN(sizeof(int));
+    *((int *)CMSG_DATA(control_message)) = fd_to_send;
+
+    return sendmsg(socket, &socket_message, 0);
+}
+
+int recv_fd(int socket)
+{
+    int sent_fd, available_ancillary_element_buffer_space;
+    struct msghdr socket_message;
+    struct iovec io_vector[1];
+    struct cmsghdr *control_message = NULL;
+    char message_buffer[1];
+    char ancillary_element_buffer[CMSG_SPACE(sizeof(int))];
+
+    /* start clean */
+    memset(&socket_message, 0, sizeof(struct msghdr));
+    memset(ancillary_element_buffer, 0, CMSG_SPACE(sizeof(int)));
+
+    /* setup a place to fill in message contents */
+    io_vector[0].iov_base = message_buffer;
+    io_vector[0].iov_len = 1;
+    socket_message.msg_iov = io_vector;
+    socket_message.msg_iovlen = 1;
+
+    /* provide space for the ancillary data */
+    socket_message.msg_control = ancillary_element_buffer;
+    socket_message.msg_controllen = CMSG_SPACE(sizeof(int));
+
+    if (recvmsg(socket, &socket_message, MSG_CMSG_CLOEXEC) < 0)
+        return -1;
+
+    if (message_buffer[0] != 'F')
+    {
+        /* this did not originate from the above function */
+        return -1;
+    }
+
+    if ((socket_message.msg_flags & MSG_CTRUNC) == MSG_CTRUNC)
+    {
+        /* we did not provide enough space for the ancillary element array */
+        return -1;
+    }
+
+    /* iterate ancillary elements */
+    for (control_message = CMSG_FIRSTHDR(&socket_message);
+         control_message != NULL;
+         control_message = CMSG_NXTHDR(&socket_message, control_message))
+    {
+        if ((control_message->cmsg_level == SOL_SOCKET) &&
+            (control_message->cmsg_type == SCM_RIGHTS))
+        {
+            sent_fd = *((int *)CMSG_DATA(control_message));
+            return sent_fd;
+        }
+    }
+
+    return -1;
+}
+
+// Shared Memory
+
+void *shmgat(char *name, int size)
+{
+    key_t key = ftok(name, 65);
+    int shmid = shmget(key, size, 0666 | IPC_CREAT);
+    if (shmid < 0)
+    {
+        perror("Creating shared memory");
+    }
+    return shmat(shmid, NULL, 0);
+}
+
+int shmdes(char *name, int size)
+{
+    key_t key = ftok(name, 65);
+    int shmid = shmget(key, size, 0666 | IPC_CREAT);
+    if (shmid < 0)
+    {
+        perror("Creating shared memory");
+    }
+    shmctl(shmid, IPC_RMID, NULL);
+}
+
+// Semaphore
+int semgetset(char * p,int i){
+    key_t k=ftok(p,0);
+    int semid=semget(k,1,IPC_CREAT|0666);
+    if(semid<0)
+        perror("semget failed");
+    if(semctl(semid,0,SETVAL,i)<0)
+        perror("Set Semaphore value failed");
+    return semid;
+}
+
+void destroy(int id){
+    semctl(id,0,IPC_RMID);
+}
+
+void sem_wait(int semid)
+{
+    struct sembuf sb;
+    sb.sem_num = 0;
+    sb.sem_op = -1;
+    sb.sem_flg = 0;
+    if ((semop(semid, &sb, 1)) == -1)
+    {
+        perror("\nFailed to acquire semaphore.");
+        exit(0);
+    }
+}
+
+int sem_try_wait(int semid)
+{
+    struct sembuf sb;
+    sb.sem_num = 0;
+    sb.sem_op = -1;
+    sb.sem_flg = IPC_NOWAIT;
+    return semop(semid, &sb, 1);
+}
+
+void sem_signal(int semid)
+{
+    struct sembuf sb;
+    sb.sem_num = 0;
+    sb.sem_op = 1;
+    sb.sem_flg = 0;
+    if ((semop(semid, &sb, 1)) == -1)
+    {
+        perror("\nFailed to release semaphore.");
+        exit(0);
+    }
+}
+
+void quick_start(void*(*func_ptr)(void *),void * arg){
+    pthread_t pt;
+    int res =pthread_create(&pt,NULL,func_ptr,arg);
+    if(res != 0){
+        perror("quick starting thread");
+    }
+    res = pthread_detach(pt);
+    if(res != 0){
+        perror("error detatching thread");
+    }
+}
+
+//raw-sockets
+unsigned short checksum(void *b, int len) {    
+    unsigned short *buf = b;
+    unsigned int sum = 0;
+    unsigned short result;
+
+    for (sum = 0; len > 1; len -= 2)
+        sum += *buf++;
+    
+    if (len == 1)
+        sum += *(unsigned char *)buf;
+    
+    sum = (sum >> 16) + (sum & 0xFFFF);
+    sum += (sum >> 16);
+    result = ~sum;
+    return result;
+}
+
+void make_ip_header(struct iphdr* iph,u_int32_t srcip,u_int32_t desip,u_int8_t protocol,u_int16_t tot_len){
+    memset(iph,0,sizeof(struct iphdr));
+    iph->saddr=srcip;
+    iph->daddr=desip;
+    iph->ihl=sizeof(struct iphdr)/4;
+    iph->protocol=protocol;
+    iph->ttl=255;
+    iph->tot_len=tot_len;
+    iph->version=4;
+    iph->check=checksum(iph,sizeof(struct iphdr));
+}
